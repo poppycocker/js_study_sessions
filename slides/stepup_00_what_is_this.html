@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WHAT IS `this` ? -JavaScriptの`this`を理解する-</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/dark.css" type="text/css">
+  </head>
+  <body>
+    <textarea id="source">
+
+name: inverse
+layout: true
+class: center, middle, inverse
+
+---
+# WHAT IS `this` ?
+<p style="text-align: center">-JavaScriptの`this`を理解する-</p>
+
+![JavaScriptロゴ](img/js_logos.png)
+
+---
+template: inverse
+# 今日の目標
+クセのあるJavaScriptの`this`。  
+静的型付けのクラスベース言語ユーザーから見ると
+- キモい
+- コワイ！
+- 難しい
+
+といったネガティブイメージが少なからずあるようです。  
+(私もありました)
+
+これを少しでも軽減したい。  
+気持ち悪さと向き合い、共に歩む決意をしていただきます。
+
+---
+template: inverse
+# 今日詳しく話さないこと
+- prototypeチェーン
+- JavaScriptの変数スコープ
+- `eval`とか`use strict;`が絡む挙動
+- ES6(ES2015)
+
+派生させていくと話が長くなるので、`this`の実践的な内容に絞ります。
+
+---
+template: inverse
+# `this`から逃げてはいけない
+
+ちゃんと理解して使っていますか？
+- jQueryで、なんとなく`$(this)`
+- 困ったら`var self = this;`
+
+---
+template: inverse
+# 例: setInterval
+```javascript
+/**
+ * 1秒おきに数字をカウントアップしてconsoleに表示する人畜無害なクラス
+ * @constructor
+ */
+var MyCounter = function() {
+  this.count = 0;
+};
+/**
+ * タイマーをスタートする<br>
+ * なおタイマーを止める方法は無い(仕様)
+ */
+MyCounter.prototype.startTimer = function() {
+  console.log(this.count);
+  setInterval(function() {
+    console.log(++this.count);
+  }, 1000);
+};
+
+new MyCounter().startTimer();
+```
+
+0, 1, 2, 3...と表示されて欲しいが、実際にはどうなる？
+
+
+---
+template: inverse
+# 例: setInterval
+実際には、 0, NaN, NaN, NaN...と表示されました。  
+納期が迫っているので、たかしくんはとりあえずの修正を行いました。
+```javascript
+/**
+ * 1秒おきに数字をカウントアップしてconsoleに表示する人畜無害なクラス
+ * @constructor
+ */
+var MyCounter = function() {
+  this.count = 0;
+};
+/**
+ * タイマーをスタートする<br>
+ * なおタイマーを止める方法は無い(仕様)
+ */
+MyCounter.prototype.startTimer = function() {
+  console.log(this.count);
+  // takashi modified on 2016/06/03 23:55
+  // コールバックの中のthisがなぜかwindowになっているので
+  // とりまローカル変数に保持
+  var self = this;
+  setInterval(function() {
+    console.log(++self.count);
+    // console.log(++this.count);
+  }, 1000);
+};
+
+new MyCounter().startTimer();
+```
+
+---
+template: inverse
+# これでいいのだろうか？
+曖昧な理解でも、アプリ開発をこなすことはとりあえずできます。
+
+ですが、OSSライブラリの中を読む必要が出てきた場合には苦戦を強いられるでしょう。
+
+また、自前でライブラリやSDKを開発する場合にはまず詰みます。
+
+---
+template: inverse
+# JavaScriptの`this`は変幻自在
+## 呼び出し方で変化するJavaScriptの`this`
+
+ここからは[JavaScriptの「this」は「4種類」？？](http://qiita.com/takeharu/items/9935ce476a17d6258e27)を引用・改変・補足しながら解説していきます。
+
+> 実際は４種類ではないのですが、  
+> このベースの４種類を理解できれば他もすぐに理解できます。
+
+---
+template: inverse
+# 4つの`this`を理解しよう
+## 1. メソッド呼び出しパターン
+``` javascript
+//メソッド呼び出しパターン
+var myObject = {
+  value: 10,
+  show: function() {
+    console.log(this.value);
+  }
+}
+myObject.show(); // 10
+```
+直感的ですね。
+
+myObject「の」show()を呼び出した  
+↓  
+show()内の`this`はmyObjectを指す
+
+---
+template: inverse
+# 4つの`this`を理解しよう
+## 2. 関数呼び出しパターン[1/2]
+ここでいうメソッド呼び出しと関数呼び出しの違いは、
+- メソッド呼び出し: '.'で何かに所属している関数を呼び出し
+- 関数呼び出し: '.'の連結なしでの呼び出し
+``` javascript
+function show() {
+  console.log(this);
+  this.value = 1;
+}
+show(); // thisはグローバルオブジェクトを指す
+```
+
+グローバルオブジェクト: Webブラウザでは`window`を指します。
+
+関数呼び出しの場合は、`window.show()`と実行するのと同じ挙動になります。  
+例え`show`自体がグローバル変数でなくても、です(次頁参照)。
+
+---
+template: inverse
+# 4つの`this`を理解しよう
+## 2. 関数呼び出しパターン[2/2]
+``` javascript
+var myObject = {
+  value: 1,
+  show: function() {
+    console.log(this.value); // [1]
+
+    function show() {
+      console.log(this.value); // [2]
+    }
+    show();
+  }
+};
+myObject.show();
+```
+[1]と[2]、それぞれ何が表示されるでしょうか？
+
+---
+template: inverse
+# 4つの`this`を理解しよう
+## 3. コンストラクタ(new)呼び出しパターン[1/2]
+``` javascript
+function MyObject(value) {
+  this.value = value;
+}
+MyObject.prototype.increment = function() {
+  this.value++;
+};
+
+var myObject = new MyObject(0);
+console.log(myObject.value); // 0
+
+myObject.increment();
+console.log(myObject.value); // 1
+```
+functionをnewしてインスタンスを生成しています。  
+(言語仕様の説明は割愛します)
+
+上記では`MyObject`がコンストラクタとして動作し、  
+内部の`this`は生成されるインスタンス自身を指します。
+
+---
+template: inverse
+# 4つの`this`を理解しよう
+## 3. コンストラクタ(new)呼び出しパターン[2/2]
+MyObjectをnewしないで、関数として実行するとどうなるでしょうか？
+``` javascript
+function MyObject(value) {
+  this.value = value;
+}
+MyObject.prototype.increment = function() {
+  this.value++;
+};
+
+MyObject(0); // どうなる？
+```
+コーディングミスで意図しない動作を引き起こす可能性があるため、  
+ファクトリパターンなど適用するとお行儀がよいと思われます。
+
+---
+template: inverse
+# 4つの`this`を理解しよう
+## 4. call,apply,bind呼び出しパターン[1/3]: call
+``` javascript
+var EventDispatcher = function(listener, context) {
+  this.listener = listener;
+  this.context = context;
+};
+EventDispatcher.prototype.fire = function() {
+  this.listener.call(this.context, 1, 2);
+};
+
+var MyObject = {
+  sum: function(val1, val2) {
+    return val1 + val2;
+  },
+  listener: function(val1, val2) {
+    console.log(this.sum(val1, val2));
+  }
+};
+
+var dispatcher = new EventDispatcher(MyObject.listener, MyObject);
+dispatcher.fire();
+```
+
+
+---
+template: inverse
+# では、setInterval問題をどう解決する？
+
+
+---
+template: inverse
+# 実行コンテキストが考慮されているAPI
+
+
+
+---
+template: inverse
+# 関連Qiitaエントリ
+
+- [JavaScriptの「this」は「4種類」？？](http://qiita.com/takeharu/items/9935ce476a17d6258e27)
+- [JS: new 呼び出しについて理解する](http://qiita.com/uin010bm/items/1ceddf65ce1171a2a9c7)
+- [じゃあ this の抜き打ちテストやるぞー](http://qiita.com/KDKTN/items/0b468a07410d757ac609)
+
+    </textarea>
+    <script src="js/remark-latest.min.js">
+    </script>
+    <script>
+      var hljs = remark.highlighter.engine;
+    </script>
+    <script src="js/remark.language.js"></script>
+    <script>
+      var slideshow = remark.create({
+          highlightStyle: 'monokai',
+          highlightLanguage: 'remark',
+          highlightLines: true
+        }) ;
+    </script>
+  </body>
+</html>

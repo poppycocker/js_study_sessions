@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>JSユニットテスト環境の紹介</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/dark.css" type="text/css">
+  </head>
+  <body>
+    <textarea id="source">
+
+name: inverse
+layout: true
+class: center, middle, inverse
+
+---
+# JSユニットテスト環境の紹介
+## Grunt + Mocha + power-assert を例に
+![JavaScriptロゴ](img/js_logos.png)
+<p style="text-align: right">last modified: 2015/11/04</p>
+
+---
+template: inverse
+# Grunt + Mocha(grunt-mocha) + power-assert
+JavaScriptのユニットテストフレームワークは数多く存在しますが、  
+本稿では上記の組み合わせで環境構築する例を紹介します。  
+2015年現在はまずまずポピュラーな構成のようですが、来年以降どうなっているかは全く保証できません
+(Gulp+Mocha+Chai+Sinon.JSがトレンドとの噂も)。
+
+※各項目の詳細についてはWeb上の情報に任せ、こちらでは概要のみに留めます。
+
+---
+template: inverse
+# index
+
+* Grunt
+* Mocha(grunt-mocha)
+* power-assert
+* サンプルを動かしてみよう
+* 補足とFAQ
+* TODO
+
+---
+template: inverse
+# [Grunt](http://gruntjs.com/)
+![Grunt](img/s_grunt_banner.jpg)
+現代のJavaScriptはビルドするものである!!  
+(Lint, concat, minify, JSDoc, etc..)
+
+このようなタスクを実行するのにバッチやMakefileを作成してもよいですが、  
+Gruntならばプラグインで提供されるタスクを簡単に組み合わせることができます！
+
+動作にはNode.jsが必要です。  
+また、同様のツールに[Gulp](http://gulpjs.com/)があります。2015年現在、Gulpの方が勢いがありGruntは下火になってきています。フロントエンド界隈は「一年一昔」の世界。
+
+---
+template: inverse
+# [Mocha](https://mochajs.org)(grunt-mocha)
+![Mocha](img/s_mocha.jpg)
+2015年現在のデファクトスタンダードなテストランナー。  
+様々な構文スタイル(BDD, TDD, Exports, QUnit, Require)でテストを記述でき、ブラウザ上でもNode.js上でも動作します。  
+
+なお、Mochaはテストを順次実行してレポートを吐く機能のみ有しており、アサーションは他のライブラリに依存する方式を採っています。
+
+本稿ではタスクをGruntからキックする都合上、Gruntプラグインとして整備された[grunt-mocha](https://github.com/kmiyashiro/grunt-mocha)を利用します。  
+grunt-mochaはテストコードをインクルードしたHTMLをヘッドレスブラウザである[PhantomJS](http://phantomjs.org/)の上で実行するスタイルを採っています。
+
+---
+template: inverse
+# [power-assert](https://github.com/power-assert-js/power-assert)
+![power-assert](img/s_power-assert_banner.jpg)
+先ほどのMochaと組み合わせて使うアサーションライブラリの一つです。
+ギョーカイでは名の知れた和田卓人氏(@t_wada)の作。  
+色々なアサーション(assertNotEqual, assertUndefined, ...etc)を使い分けなくとも、
+assertで書いておけば失敗時に式の評価など詳細情報を自動的に吐いてくれるすぐれもの(単純なassert以外使えないというわけではない)。
+
+ただし、適用するには[espower](https://github.com/power-assert-js/espower)というツールでテストコードをpower-assert用に変換してから実行する必要があります。
+
+広く使われているアサーションライブラリは、ほかにも[Chai](http://chaijs.com/)があります。
+assertのほかにshould(BDD)スタイル、expect(TDD)スタイルが選択可能になっており、多機能。
+世界的にはこちらが主流の模様ですが、本稿では機能の多彩さより手軽さを重視してpower-assertを選択しました。
+
+---
+template: inverse
+# サンプルを動かしてみよう
+## 準備と実行
+サンプルが`samples/unittest`以下に置いてあります。  
+[Node.js](https://nodejs.org)をインストールした後、下記のようにコマンドを実行して準備を整えましょう。
+
+```sh
+$ cd path/to/repository_root/samples/unittest
+$ npm install -g grunt-cli &amp;&amp; npm install
+```
+GruntのコマンドラインI/Fがインストールされるとともに、  
+各種パッケージとGruntプラグインがインストールされます。
+
+インストールが完了したら、タスクを走らせてテストを実行してみましょう。
+```sh
+$ grunt
+```
+テストの実行結果は確認できましたか？
+
+---
+template: inverse
+# サンプルを動かしてみよう
+## 中身の確認
+ひとまず動くことが確認できたら、ファイル構成を見てみましょう。
+
+* samples/unittest/
+    - node_modules :`npm install`で配置されるパッケージ群
+    - src/ :プロジェクトのソースコード群(テスト対象)
+    - test/
+      + spec/ :テストコード群(BDDスタイル)
+      + sample.html :テスト単位となるhtml
+    - Gruntfile.js: Gruntのタスク定義
+    - package.json: npmパッケージ定義
+
+Gruntfile.jsを覗くと、grunt-espowerでテストコード群をpower-assert用に変換し、
+続くgrunt-mochaでテスト単位になるHTMLからテストを順次実行していることがわかります。
+
+各HTML側ではmochaやpower-assert本体、テスト対象、テストコードなど実行に必要な全てを読み込み、`mocha.run();`でテストを実行しています。
+
+---
+template: inverse
+# サンプルを動かしてみよう
+## 実行スタイル,HTMLを介すか否か
+なお、本稿ではgrunt-mochaを利用している都合上、HTMLをヘッドレスブラウザである[PhantomJS](http://phantomjs.org/)の上で実行するという仕組みに則っています。
+仮にDOMとの連携が不要なライブラリなどのテストを行う場合は、必ずしもHTMLを介した構成にする必要はありません。
+
+例として、[grunt-simple-mocha](https://github.com/yaymukund/grunt-simple-mocha)はHTMLを介さない構成を採っています。
+また、プラグイン化されていない素のMochaをNode.js上で実行することももちろん可能です。
+
+---
+template: inverse
+# 補足とFAQ
+## テスト中にDOM操作も行いたい
+HTMLを介して実行するスタイルを採っていれば、通常のJSアプリと同様にDOMへのアクセスが可能です。
+## CI環境に組み込みたい
+当方では構築していませんが、Node.jsが動く環境であればJenkinsや[Travis CI](https://travis-ci.org/), [CircleCI](https://circleci.com/)と組み合わせられるようです。ググってみてください。
+## スパイ・スタブ・モック
+本稿の構成には、こういったテストダブルを提供する仕組みは含まれていません。現在のところ、導入するとしたら[Sinon.JS](http://sinonjs.org/)一択のようです。
+## ES6にも対応してる？
+すみません。未調査です。
+
+---
+template: inverse
+# TODO
+- 各設定ファイルの内容説明充実
+- Sinon.JSも取り入れたサンプルと解説
+- (調査)PhantomJSを利用しているなら、ブラウザイベントの発生も記述できるのか？
+
+
+    </textarea>
+    <script src="js/remark-latest.min.js">
+    </script>
+    <script>
+      var hljs = remark.highlighter.engine;
+    </script>
+    <script src="js/remark.language.js"></script>
+    <script>
+      var slideshow = remark.create({
+          highlightStyle: 'monokai',
+          highlightLanguage: 'remark',
+          highlightLines: true
+        }) ;
+    </script>
+  </body>
+</html>

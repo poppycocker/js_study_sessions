@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>MixiのJavaScriptTrainingを終えたら</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/dark.css" type="text/css">
+  </head>
+  <body>
+    <textarea id="source">
+
+name: inverse
+layout: true
+class: center, middle, inverse
+
+---
+# MixiのJavaScriptTrainingを終えたら[1]
+## JavaScriptコア知識の強化編
+![JavaScriptロゴ](img/js_logos.png)
+<p style="text-align: right">last modified: 2015/10/16</p>
+
+---
+template: inverse
+# JavaScriptコア知識の強化
+MixiのトレーニングではDOMの扱い方や非同期処理、JavaScriptのイディオムについて学習をしました。  
+本稿では、構造的なJavaScriptコードを読み書きするために知識を強化していきます。
+
+---
+template: inverse
+# index
+
+* クロージャの補足
+* 非同期処理のはまりどころ
+* prototypeの補足
+* thisの振る舞い
+* jQueryを軽く紹介
+* MV*フレームワーク
+* JSONとJSONPとSame-Origin Policy
+
+---
+template: inverse
+# クロージャの補足
+これはfunctionスコープでしか変数を囲うことができないJavaScriptで、privateな変数を作る唯一の方法なのです。  
+下の例では`i`がprivateになり、外から書き換えることはできません。
+これは至るところで多用されているテクニックですので覚えておきましょう。
+```javascript
+var createCounter = function() {
+  var i = 0;
+  return function() {
+    return i++;
+  };
+};
+
+var counter = createCounter();
+```
+## 参考
+- [Qiita:JavaScriptでクロージャ入門](http://qiita.com/takeharu/items/4975031faf6f7baf077a)
+- [JavaScript：undefined値の判定](http://blog.tojiru.net/article/205007468.html)  
+->「自分でundefinedを定義してしまう」の項は必見
+
+---
+template: inverse
+# 非同期処理のはまりどころ
+「functionスコープでしか変数を囲うことができない」  
+という言語仕様に注意して、下記コードの実行結果がどうなるか考えてみましょう。
+```javascript
+// consoleに0から4まで順番に表示したい
+var i = 0;
+for (; i < 5; i++) {
+  setTimeout(function() {
+    console.log(i);
+  }, 500);
+}
+```
+・・・お分かりいただけただろうか。  
+こういった問題のため、forループの中に直接functionを記述するのは悪手とされています。  
+ではどうすればよい？
+
+---
+template: inverse
+# 非同期処理のはまりどころ
+forループの添字をfunctionスコープの中で固定することで解決。  
+もしくはPromiseパターンを使いましょう。
+.pull-left[
+改修前
+```javascript
+var i = 0;
+for (; i < 5; i++) {
+  setTimeout(function() {
+    console.log(i);
+  }, 500);
+}
+```
+]
+.pull-right[
+改修後(例)
+```javascript
+var func = function(i) {
+  // ここでのiはforループの添字とは別物
+  // (functionスコープ内のローカル変数)
+  setTimeout(function() {
+    console.log(i);
+  }, 500);
+}, i = 0;
+for (; i < 5; i++) {
+  func(i);
+}
+```
+こういうのも(setTimeoutの仕様を参照)
+```javascript
+var i = 0;
+for (; i < 5; i++) {
+  setTimeout(function(i) {
+    console.log(i);
+  }, 500, i);
+}
+```
+]
+
+---
+template: inverse
+# Class的なものとprototype
+「JavaScriptは人類には早すぎた」と言われる所以であるprototypeという仕組み。
+
+mixiのトレーニング第7章でprototype継承に触れたとは思いますが、  
+下記資料を読んで防御力を上げておくとよいです。
+
+(丸投げ)
+
+[や...やっと理解できた！JavaScriptのプロトタイプチェーン](http://maeharin.hatenablog.com/entry/20130215/javascript_prototype_chain)
+
+---
+template: inverse
+# thisの振る舞い
+「JavaScriptは人類には早すぎた」と言われる所以であるthisの振る舞いについて。
+
+JavaやC++プログラマーの気持ちで下記コードがどう動くか想像してみましょう。
+```javascript
+var Hoge = function(num) {
+  this.num = num;
+};
+Hoge.prototype = {
+  setup: function() {
+    // 画面クリック時にthis.numをconsoleに表示
+    window.addEventListener('click', function() {
+      console.log(this.num);
+    });
+  }
+};
+var hoge = new Hoge(123);
+hoge.setup();
+```
+画面をクリックしたら何が表示されるでしょう？  
+`123`がコンソールに表示されると期待しましたか？  
+しかし実際に表示されるのは`undefined`。なぜなのか。
+
+---
+template: inverse
+# thisの振る舞い
+## !!超重要!!
+「JavaScriptでは`this`に何が入るかは関数を実行するまで決まっておらず、  
+実行時の呼び出し方(コンテキストともいう)によって決定される」
+
+詳細についてはきれいに説明できる自信がないため、下記をご覧ください。  
+[JavaScriptの「this」は「4種類」？？](http://qiita.com/takeharu/items/9935ce476a17d6258e27)
+
+読み終えたら先ほどのコードの解説に移ります。
+
+---
+template: inverse
+# thisの振る舞い
+もう一度コードを見てみましょう。  
+```javascript
+var Hoge = function(num) {
+  this.num = num;
+};
+Hoge.prototype = {
+  setup: function() {
+    // ↑このfunctionはHogeのメソッドとして呼ばれている。
+    // そのため、thisはHoge.prototypeを指す。
+    window.addEventListener('click', function() {
+      // ↑このfunctionは何かのメンバではない。
+      // 単なる関数呼び出しのため、thisはグローバルオブジェクト
+      // (Webブラウザならwindow)を指す。
+      // console.log(this);
+      console.log(this.num);
+    });
+  }
+};
+var hoge = new Hoge(123);
+hoge.setup();
+```
+では、イメージ通りの働きをさせるには？
+
+---
+template: inverse
+# thisの振る舞い
+
+.pull-left[
+改修案1: ローカル変数にthisを保持
+```javascript
+var Hoge = function(num) {
+  this.num = num;
+};
+Hoge.prototype = {
+  setup: function() {
+    // thisをローカル変数に保持してしまう
+    var self = this;
+    window.addEventListener('click', function() {
+      console.log(self.num);
+    });
+  }
+};
+var hoge = new Hoge(123);
+hoge.setup();
+```
+]
+
+.pull-right[
+改修案2: Function.prototype.bind()
+```javascript
+var Hoge = function(num) {
+  this.num = num;
+};
+Hoge.prototype = {
+  setup: function() {
+    // 実行コンテキストの束縛を行う
+    window.addEventListener('click', (function() {
+      console.log(this.num);
+    }).bind(this));
+  }
+};
+var hoge = new Hoge(123);
+hoge.setup();
+```
+]
+
+---
+template: inverse
+# thisの振る舞い
+## 補足:Arrayのメソッド
+Arrayの各種操作系メソッドは、オプション引数に  
+`this`として扱うオブジェクトを指定できるようになっています。
+
+```javascript
+var Fuga = function(prefix) {
+  this.prefix = 'fuga!: ';
+  this.ar = [1, 2, 3, 4, 5];
+};
+Fuga.prototype = {
+  showEach: function() {
+    this.ar.forEach(function(v) {
+      console.log(this.prefix + v);
+    }, this); // <- 第2引数で指定可能
+  }
+};
+var fuga = new Fuga(123);
+fuga.showEach();
+```
+`Array.prototype.map`, `Array.prototype.reduce`, `Array.prototype.filter` なども同様です。
+
+---
+template: inverse
+# jQueryを軽く紹介
+## write less, do more.
+
+[https://jquery.com/](https://jquery.com/)  
+DOM操作、CSS操作、イベントハンドリング、Ajax、アニメーションなどを手軽に簡潔に記述でき、しかもブラウザ間の差異を吸収してくれる素晴らしいライブラリ。  
+2006年頃に登場し、コア機能の充実っぷりとプラグイン開発の容易さから爆発的に普及した。  
+生のJavaScriptは書けないがjQueryなら扱える、というWebデザイナーは少なくない。
+
+---
+template: inverse
+# jQueryを軽く紹介
+## コード例
+```javascript
+// DOMツリーの構築が終わったタイミングで実行
+$(function() {
+  // pを生成して色々してからbody直下に追加
+  var $p = $('<p>').text('write less, do more.').css({
+    color: '#00FF00',
+    fontWeight: 'bold'
+  }).addClass('cls-sample');
+  $('body').append($p);
+
+  // イベントリスナー登録
+  $p.click(function() {
+    $(this).css('color': '#FF0000');
+  })
+
+  // ajax通信
+  $.ajax({
+    type: 'GET',
+    url: 'http://api.hoge.com',
+    dataType: 'jsonp',
+    success: function(json){
+      console.log(json);
+    }
+  });
+})
+```
+---
+template: inverse
+# MV*フレームワーク
+jQueryは便利だが、何でもかんでもjQueryでやってしまうとアプリの構造が複雑怪奇なものになりやすい。  
+JavaScriptでの大規模アプリが一般化するにつれ、この問題が無視できなくなってきた。
+```javascript
+// #hogeをクリックしたら#fugaを表示して、同時にクリックイベントを...
+// 見た目もイベントもビジネスロジックもごちゃ混ぜ。
+$('#hoge').click(function() {
+  $('#fuga').show().click(function() {
+    $.ajax({
+      type: 'GET',
+      url: 'http://api.fuga.com',
+      success: function(json){
+        // do some stuff...
+      }
+    });
+  });
+  $(this).addClass('clicked');
+})
+```
+
+---
+template: inverse
+# MV*フレームワーク
+「JavaScriptの世界にもMVC/MVP/MVVMパターンを取り入れよう」  
+という動きが2010年台初頭から広がり、様々なフレームワークが開発されてきた。
+
+## 2015年時点での3大フレームワーク
+- [Angular](https://angularjs.org/)
+- [Backbone](http://backbonejs.org/)(with [Underscore](http://underscorejs.org/), [jQuery](https://jquery.com/))
+- [React](https://facebook.github.io/react/)
+
+それぞれの思想や特徴や評判、流行り廃りについてはぜひご自分で調べてみてください。  
+次のページでBackboneだけ紹介します。
+
+---
+template: inverse
+# MV*フレームワーク
+## Backboneでの書き換え例(1/2)
+```javascript
+var mediator = {};
+_.extend(mediator, Backbone.Events);
+
+var HogeView = Backbone.View.extend({
+    el: '#hoge',
+    events: {
+        'click': 'onClick'
+    },
+    initialize: function() {
+        _.bindAll(this, 'onClick');
+        // その他初期化処理をここで
+    },
+    onClick: function() {
+        this.$el.addClass('clicked');
+        mediator.trigger('onHogeClicked');
+    }
+});
+
+// 次ページへ続く...
+```
+---
+template: inverse
+# MV*フレームワーク
+## Backboneでの書き換え例(2/2)
+```javascript
+/// ...承前
+
+var FugaView = Backbone.View.extend({
+    el: '#fuga',
+    events: { 'click': 'onClick' },
+    initialize: function() {
+        _.bindAll(this, 'show', 'onClick', 'onAjaxSuccess');
+        // mediatorから伝わるイベントを拾う
+        this.listenTo(mediator, 'onHogeClicked', this.show);
+        // その他初期化処理をここで
+    },
+    show: function() { this.$el.show(); },
+    onClick: function() {
+        $.ajax({
+            type: 'GET',
+            url: 'http://api.fuga.com',
+            success: _.bind(this.onAjaxSuccess, this)
+        });
+    },
+    onAjaxSuccess: function(json) { /* do some stuff... */ }
+});
+
+var hogeView = new HogeView();
+var fugaView = new FugaView();
+```
+---
+template: inverse
+# MV*フレームワーク
+jQueryオンリーの場合と比べて、コードは長く、冗長になりました。
+
+ですが、処理の流れは追いやすくなったのではないでしょうか？
+
+---
+template: inverse
+# JSONとJSONPとSame-Origin Policy
+## JSON(ジェイソン, JavaScript Object Notation)
+JavaScriptのオブジェクトの表記法をベースとした、データ記述言語。  
+サーバー/クライアント間のデータ通信に使われたり、設定ファイルとして使われたりする。
+```json
+{
+  "seasons": [
+    "spring",
+    "summer",
+    "autumn",
+    "winter"
+  ],
+  "obj": {
+    "ar": [1, 2, 3],
+    "str": "string!",
+    "num": 1234
+  }
+}
+```
+`JSON.parse`でJSON文字列をパースできる。  
+`JSON.stringify`でJavaScriptオブジェクトをJSON文字列に変換できる。
+
+---
+template: inverse
+# JSONとJSONPとSame-Origin Policy
+## JSONP(ジェイソンピー, JSON with Padding)
+scriptタグを使用してクロスドメインなデータを取得する仕組みのことである。HTMLのscriptタグ、JavaScript（関数）、JSONを組み合わせて実現される。  
+([Wikipedia - JSONP](https://ja.wikipedia.org/wiki/JSONP)より)
+```html
+&lt;-- scriptタグを生成 --&gt;
+&lt;script type='text/javascript' 
+     src='http://api.hoge.com/getjson?callback=callbackFunc&amp;param=...'&gt;
+```
+```javascript
+// 上記scriptタグにより、下記JavaScriptコードがロードされる
+callbackFunc({/* JSON */})
+```
+
+サーバー側はリクエストを受けて`コールバック関数名({返したいJSONデータ});`の形を動的に生成し、
+クライアント側はこれをscriptタグ経由で読み込んでいる。
+
+なるほど。では、なぜこんな回りくどいことをするのか？
+
+---
+template: inverse
+# JSONとJSONPとSame-Origin Policy
+## Same-Origin Policy
+日本語では同一生成元ポリシーと呼ぶ。[Wikipedia - 同一生成元ポリシー](https://ja.wikipedia.org/wiki/%E5%90%8C%E4%B8%80%E7%94%9F%E6%88%90%E5%85%83%E3%83%9D%E3%83%AA%E3%82%B7%E3%83%BC)を参照。  
+かなり込み入った話になるので、詳細についてはここでは触れません。
+ひとまずここでは下記のみ押さえておいてください。
+- ブラウザによってサイトを跨いだ(Cross-Origin)XMLHttpRequestが制限される。
+- scriptタグによるコードの読み込みと実行であれば上記制限を受けない。
+
+前頁に示したように、JSONPであればポリシーに違反せずにクロスオリジンなデータロードを実現できる。
+なおjQueryの`$.ajax`なら簡単。JSONP指定時はscriptタグ生成を裏で勝手にやってくれる。
+.pull-left[
+JSON
+```javascript
+$.ajax({
+    type: 'GET',
+    url: 'http://api.hoge.com',
+    dataType: 'json'
+    success: function(json){
+      console.log(json);
+    }
+  });
+```
+]
+.pull-right[
+JSONP
+```javascript
+$.ajax({
+    type: 'GET',
+    url: 'http://api.hoge.com',
+    dataType: 'jsonp',
+    jsonpCallback: 'callbackFunc',
+    success: function(json){
+      console.log(json);
+    }
+  });
+```
+]
+
+---
+template: inverse
+# 以上
+
+    </textarea>
+    <script src="js/remark-latest.min.js">
+    </script>
+    <script>
+      var hljs = remark.highlighter.engine;
+    </script>
+    <script src="js/remark.language.js"></script>
+    <script>
+      var slideshow = remark.create({
+          highlightStyle: 'monokai',
+          highlightLanguage: 'remark',
+          highlightLines: true
+        }) ;
+    </script>
+  </body>
+</html>
